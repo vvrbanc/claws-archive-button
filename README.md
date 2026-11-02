@@ -36,7 +36,19 @@ selected subsequently.
 - Build claws (`./autogen.sh`, `./configure`, `make`, `make install`)
   in the claws source root directory.
 
-## Notes
+## Usage
 
-- The functionality to mark messages read on archive is not
-  implemented yet.
+- Load the plugin in Configuration → Plugins (`archive_button.so`).
+- For each account, enable archiving and choose the archive folder in
+  Configuration → Edit accounts → (account) → Plugins → ArchiveButton.
+  Optionally enable "Mark read on archive."
+- Add the "Archive" item to the main window and/or message window
+  toolbar in Configuration → Preferences → Toolbars.
+
+## Compatibility
+
+Ported to Claws Mail 4.x (GTK3); tested against Claws Mail 4.4.0.
+Building also requires adding the plugin to `configure.ac`
+(`--enable-archive_button-plugin`, `BUILD_ARCHIVE_BUTTON_PLUGIN`
+conditional and `src/plugins/archive_button/Makefile` in
+`AC_CONFIG_FILES`) before running `./autogen.sh`.

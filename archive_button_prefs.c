@@ -54,7 +54,7 @@ static PrefParam prefs[] = {
 
 #define PACK_HBOX(hbox, vbox) \
 { \
-	hbox = gtk_hbox_new (FALSE, 5); \
+	hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 5); \
 	gtk_widget_show (hbox); \
 	gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0); \
 }
@@ -117,7 +117,7 @@ static void archive_button_prefs_account_create_widget_func(PrefsPage *_page,
 	GtkWidget *button;
 	GtkWidget *mark_read_on_archive_checkbtn;
 
-	page_vbox = gtk_vbox_new (FALSE, VSPACING);
+	page_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, VSPACING);
 	gtk_widget_show (page_vbox);
 	gtk_container_set_border_width (GTK_CONTAINER (page_vbox), VBOX_BORDER);
 
@@ -125,7 +125,7 @@ static void archive_button_prefs_account_create_widget_func(PrefsPage *_page,
 	PACK_CHECK_BUTTON(page_vbox, enable_checkbtn, _("Archive for this account"));
 
 
-	archive_button_vbox = gtk_vbox_new (FALSE, VSPACING);
+	archive_button_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, VSPACING);
 	gtk_widget_show (archive_button_vbox);
 	gtk_box_pack_start (GTK_BOX (page_vbox), archive_button_vbox, FALSE, FALSE, 0);
 
@@ -133,8 +133,6 @@ static void archive_button_prefs_account_create_widget_func(PrefsPage *_page,
 	
 	archive_folder_vbox = gtkut_get_options_frame(archive_button_vbox, &archive_folder_frame,
 			_("Put archived messages in"));
-	gtk_widget_show (archive_folder_vbox);
-	gtk_box_pack_start (GTK_BOX (page_vbox), archive_folder_vbox, FALSE, FALSE, 0);
 	
 	PACK_HBOX (hbox, archive_folder_vbox);
 	archive_folder_entry = gtk_entry_new();
@@ -146,7 +144,7 @@ static void archive_button_prefs_account_create_widget_func(PrefsPage *_page,
 
 	button = gtkut_get_browse_file_btn(_("Browse"));
 	gtk_widget_show (button);
-	gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
+	gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
 	g_signal_connect(G_OBJECT (button), "clicked", 
 			G_CALLBACK (archive_button_prefs_select_folder_cb),
 			archive_folder_entry);
@@ -188,6 +186,7 @@ static gint archive_button_prefs_account_apply(struct ArchiveButtonAccountPage *
 	config = archive_button_prefs_account_get_config(page->account);
 	
 	config->enable = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(page->enable_checkbtn));
+	g_free(config->archive_folder);
 	config->archive_folder = gtk_editable_get_chars(GTK_EDITABLE(page->archive_folder_entry), 0, -1);
 	config->mark_read_on_archive = gtk_toggle_button_get_active(
 			GTK_TOGGLE_BUTTON(page->mark_read_on_archive_checkbtn));
@@ -208,7 +207,7 @@ static gboolean archive_button_prefs_account_check(struct ArchiveButtonAccountPa
 	return TRUE;
 }
 
-void archive_button_prefs_account_save_func(PrefsPage *_page)
+static void archive_button_prefs_account_save_func(PrefsPage *_page)
 {
 	struct ArchiveButtonAccountPage *page = (struct ArchiveButtonAccountPage *) _page;
 	if (archive_button_prefs_account_check(page)) {
@@ -216,13 +215,13 @@ void archive_button_prefs_account_save_func(PrefsPage *_page)
 	}
 }
 
-gboolean archive_button_prefs_account_can_close(PrefsPage *_page)
+static gboolean archive_button_prefs_account_can_close(PrefsPage *_page)
 {
 	struct ArchiveButtonAccountPage *page = (struct ArchiveButtonAccountPage *) _page;
 	return archive_button_prefs_account_check(page);
 }
 
-void archive_button_prefs_init()
+void archive_button_prefs_init(void)
 {
 	gchar *rcpath;
 
@@ -257,14 +256,22 @@ void archive_button_prefs_done(void)
 	rc_file_path = g_strconcat(get_rc_dir(), G_DIR_SEPARATOR_S,
 				   COMMON_RC, NULL);
 	pref_file = prefs_write_open(rc_file_path);
-	g_free(rc_file_path);
 
-	if (!pref_file || prefs_set_block_label(pref_file, PREFS_BLOCK_NAME) < 0)
+	if (!pref_file) {
+		g_free(rc_file_path);
 		return;
+	}
+
+	if (prefs_set_block_label(pref_file, PREFS_BLOCK_NAME) < 0) {
+		prefs_file_close_revert(pref_file);
+		g_free(rc_file_path);
+		return;
+	}
 
 	if (prefs_write_param(prefs, pref_file->fp) < 0) {
 		g_warning("failed to write ArchiveButton Plugin configuration");
 		prefs_file_close_revert(pref_file);
+		g_free(rc_file_path);
 		return;
 	}
 
@@ -273,6 +280,8 @@ void archive_button_prefs_done(void)
 		prefs_file_close_revert(pref_file);
 	} else
 		prefs_file_close(pref_file);
+
+	g_free(rc_file_path);
 }
 
 struct ArchiveButtonAccountConfig *archive_button_prefs_account_get_config(
@@ -280,8 +289,8 @@ struct ArchiveButtonAccountConfig *archive_button_prefs_account_get_config(
 {
 	ArchiveButtonAccountConfig *config;
 	const gchar *confstr;
-	gchar enable, mark_read_on_archive;
-	gchar tmparchivefolder[512];
+	gchar enable = 'n', mark_read_on_archive = 'n';
+	gchar tmparchivefolder[512] = "!";
 
 	config = g_new0(ArchiveButtonAccountConfig, 1);
 
@@ -293,11 +302,12 @@ struct ArchiveButtonAccountConfig *archive_button_prefs_account_get_config(
 	if (confstr == NULL)
 		return config;
 
-	sscanf(confstr, "%c%c%511[^\t]",
+	if (sscanf(confstr, "%c%c%511[^\t]",
 			&enable,
 			&mark_read_on_archive,
 			tmparchivefolder
-			);
+			) < 2)
+		return config;
 
 	config->archive_folder = g_strndup(tmparchivefolder, 511);
 	config->enable = enable == 'y';

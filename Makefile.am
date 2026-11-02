@@ -3,6 +3,15 @@
 # terms of the General Public License version 3 (or later).
 # See COPYING file for license details.
 
+include $(srcdir)/../win_plugin.mk
+
+IFLAGS = \
+	-I$(top_builddir)/src \
+	-I$(top_builddir)/src/common \
+	-I$(top_srcdir)/src \
+	-I$(top_srcdir)/src/common \
+	-I$(top_srcdir)/src/gtk
+
 plugindir = $(pkglibdir)/plugins
 
 if BUILD_ARCHIVE_BUTTON_PLUGIN
@@ -14,21 +23,18 @@ archive_button_la_SOURCES = \
 	archive_button_prefs.c archive_button_prefs.h
 
 archive_button_la_LDFLAGS = \
-	-avoid-version -module
+	$(plugin_ldflags) \
+	-avoid-version -module -z noexecstack
 
-if CYGWIN
-cygwin_export_lib = -L$(top_builddir)/src -lclaws-mail
-else
-cygwin_export_lib = 
-endif
+EXTRA_archive_button_la_DEPENDENCIES = $(plugin_extra_deps)
 
-archive_button_la_LIBADD = $(cygwin_export_lib) \
-	$(GTK_LIBS) 
+archive_button_la_LIBADD = $(plugin_libadd) \
+	$(GTK_LIBS)
 
 archive_button_la_CPPFLAGS = \
-	-I$(top_srcdir)/src \
-	-I$(top_builddir)/src/common \
-	-I$(top_srcdir)/src/common \
-	-I$(top_srcdir)/src/gtk \
+	$(IFLAGS) \
 	$(GLIB_CFLAGS) \
-	$(GTK_CFLAGS)
+	$(GTK_CFLAGS) \
+	$(ENCHANT_CFLAGS)
+
+.PHONY: test
