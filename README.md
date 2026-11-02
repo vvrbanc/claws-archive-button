@@ -44,6 +44,10 @@ selected subsequently.
   Optionally enable "Mark read on archive."
 - Add the "Archive" item to the main window and/or message window
   toolbar in Configuration → Preferences → Toolbars.
+- Message → Archive (also in the message list's right-click menu)
+  does the same and can be bound to a key: enable "Keyboard
+  shortcuts" in Configuration → Preferences → Other → Miscellaneous,
+  then hover over Message → Archive and press the desired key.
 
 ## Compatibility
 

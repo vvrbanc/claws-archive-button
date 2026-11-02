@@ -43,6 +43,7 @@
 #include "summaryview.h"
 #include "messageview.h"
 #include "prefs_toolbar.h"
+#include "menu.h"
 
 #include "archive_button.h"
 #include "archive_button_prefs.h"
@@ -57,6 +58,18 @@ static void toolbar_archive_button_mainwindow_cb (gpointer parent,
 static void toolbar_archive_button_messagewindow_cb (gpointer parent,
 						  const gchar *item_name,
 				 		  gpointer        data);
+
+static void archive_button_menu_cb(GtkAction *action, gpointer data);
+
+/* A menu item makes the action bindable to a keyboard shortcut
+ * (hover over it with "Enable keyboard shortcuts" on and press a key) */
+static GtkActionEntry archive_button_main_menu[] = {{
+	"Message/ArchiveButton",
+	NULL, N_("_Archive"), NULL, NULL, G_CALLBACK(archive_button_menu_cb)
+}};
+
+static guint main_menu_id = 0;
+static guint context_menu_id = 0;
 
 static gboolean check_enabled(ArchiveButtonAccountConfig *ac_config) {
 	if(!ac_config->enable) {
@@ -194,8 +207,18 @@ static void toolbar_archive_button_messagewindow_cb(gpointer parent,
 	move_message_to_archive_messageview(messageview);
 }
 
+static void archive_button_menu_cb(GtkAction *action, gpointer data)
+{
+	MainWindow *mainwindow = (MainWindow *)data;
+
+	debug_print("ArchiveButton: menu item activated\n");
+	move_message_to_archive_summaryview(mainwindow->summaryview);
+}
+
 gint plugin_init(gchar **error)
 {
+	MainWindow *mainwin = mainwindow_get_mainwindow();
+
 	if (!check_plugin_version(MAKE_NUMERIC_VERSION(4,0,0,0),
 				VERSION_NUMERIC, PLUGIN_NAME, error))
 		return -1;
@@ -207,6 +230,14 @@ gint plugin_init(gchar **error)
 	prefs_toolbar_register_plugin_item(TOOLBAR_MSGVIEW, PLUGIN_NAME, TOOLBAR_ITEM_NAME,
 			toolbar_archive_button_messagewindow_cb, NULL);
 
+	gtk_action_group_add_actions(mainwin->action_group, archive_button_main_menu,
+			1, (gpointer)mainwin);
+	MENUITEM_ADDUI_ID_MANAGER(mainwin->ui_manager, "/Menu/Message/Trash", "ArchiveButton",
+			  "Message/ArchiveButton", GTK_UI_MANAGER_MENUITEM,
+			  main_menu_id)
+	MENUITEM_ADDUI_ID_MANAGER(mainwin->ui_manager, "/Menus/SummaryViewPopup/Trash", "ArchiveButton",
+			  "Message/ArchiveButton", GTK_UI_MANAGER_MENUITEM,
+			  context_menu_id)
 
 	archive_button_prefs_init();
 
@@ -217,6 +248,17 @@ gint plugin_init(gchar **error)
 
 gboolean plugin_done(void)
 {
+	MainWindow *mainwin = mainwindow_get_mainwindow();
+
+	if (mainwin != NULL) {
+		MENUITEM_REMUI_MANAGER(mainwin->ui_manager, mainwin->action_group,
+				"Message/ArchiveButton", main_menu_id);
+		main_menu_id = 0;
+		MENUITEM_REMUI_MANAGER(mainwin->ui_manager, mainwin->action_group,
+				"Message/ArchiveButton", context_menu_id);
+		context_menu_id = 0;
+	}
+
 	prefs_toolbar_unregister_plugin_item(TOOLBAR_MAIN, PLUGIN_NAME, TOOLBAR_ITEM_NAME);
 	prefs_toolbar_unregister_plugin_item(TOOLBAR_MSGVIEW, PLUGIN_NAME, TOOLBAR_ITEM_NAME);
 
@@ -237,7 +279,8 @@ const gchar *plugin_desc(void)
 	         "It allows moving selected mails to a predefined archive folder "
 		 "for each account.\n\n"
 		 "Add the \"Archive\" item to the main window and/or message "
-		 "window toolbar in Configuration/Preferences/Toolbars, and "
+		 "window toolbar in Configuration/Preferences/Toolbars, or use "
+		 "Message/Archive (which can be given a keyboard shortcut), and "
 		 "set the archive folder for each account in "
 		 "Configuration/Edit accounts/Plugins/ArchiveButton.");
 }
