@@ -71,6 +71,38 @@ static GtkActionEntry archive_button_main_menu[] = {{
 static guint main_menu_id = 0;
 static guint context_menu_id = 0;
 
+/* Claws toggles its own menu items' sensitivity from a fixed list plugins
+ * can't extend, so mirror "Move..." which has the same conditions */
+static GBinding *main_menu_binding = NULL;
+static GBinding *context_menu_binding = NULL;
+
+/* The binding goes away by itself if either widget is destroyed first,
+ * the weak pointer then resets *binding to NULL */
+static void bind_sensitive_to(GtkUIManager *ui_manager,
+			      const gchar *source_path,
+			      const gchar *target_path,
+			      GBinding **binding)
+{
+	GtkWidget *source = gtk_ui_manager_get_widget(ui_manager, source_path);
+	GtkWidget *target = gtk_ui_manager_get_widget(ui_manager, target_path);
+
+	if (!source || !target)
+		return;
+
+	*binding = g_object_bind_property(source, "sensitive", target, "sensitive",
+					  G_BINDING_SYNC_CREATE);
+	g_object_add_weak_pointer(G_OBJECT(*binding), (gpointer *)binding);
+}
+
+static void unbind_sensitive(GBinding **binding)
+{
+	if (*binding) {
+		g_object_remove_weak_pointer(G_OBJECT(*binding), (gpointer *)binding);
+		g_binding_unbind(*binding);
+		*binding = NULL;
+	}
+}
+
 static gboolean check_enabled(ArchiveButtonAccountConfig *ac_config) {
 	if(!ac_config->enable) {
 		alertpanel_error(_("Archive not enabled for this account."));
@@ -120,11 +152,18 @@ static ArchiveButtonAccountConfig *get_archive_config(FolderItem *item,
 
 static void move_message_to_archive_summaryview(SummaryView *summaryview)
 {
+	SensitiveCondMask cond;
 	FolderItem *dest_folder = NULL;
 	ArchiveButtonAccountConfig *ac_config = NULL;
 
 	if(!summaryview->folder_item ||
 	   FOLDER_TYPE(summaryview->folder_item->folder) == F_NEWS)
+		return;
+
+	/* Same conditions as "Move...", also covers keyboard shortcuts
+	 * pressed while the menu item is insensitive */
+	cond = main_window_get_mask(M_TARGET_EXIST, M_ALLOW_DELETE, M_NOT_NEWS, -1);
+	if((main_window_get_current_state(summaryview->mainwin) & cond) != cond)
 		return;
 
 	if(NULL == (ac_config = get_archive_config(summaryview->folder_item, &dest_folder)))
@@ -239,6 +278,12 @@ gint plugin_init(gchar **error)
 			  "Message/ArchiveButton", GTK_UI_MANAGER_MENUITEM,
 			  context_menu_id)
 
+	gtk_ui_manager_ensure_update(mainwin->ui_manager);
+	bind_sensitive_to(mainwin->ui_manager, "/Menu/Message/Move",
+			"/Menu/Message/ArchiveButton", &main_menu_binding);
+	bind_sensitive_to(mainwin->ui_manager, "/Menus/SummaryViewPopup/Move",
+			"/Menus/SummaryViewPopup/ArchiveButton", &context_menu_binding);
+
 	archive_button_prefs_init();
 
 	debug_print("ArchiveButton plugin loaded\n");
@@ -249,6 +294,9 @@ gint plugin_init(gchar **error)
 gboolean plugin_done(void)
 {
 	MainWindow *mainwin = mainwindow_get_mainwindow();
+
+	unbind_sensitive(&main_menu_binding);
+	unbind_sensitive(&context_menu_binding);
 
 	if (mainwin != NULL) {
 		MENUITEM_REMUI_MANAGER(mainwin->ui_manager, mainwin->action_group,
